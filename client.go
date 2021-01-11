@@ -35,9 +35,18 @@ type SearchResponse struct {
 	NextPage bool
 }
 
+func (res *SearchResponse) isSuccess() bool {
+	return true
+}
+
 type SearchErrorResponse struct {
 	Error string
 }
+
+func (res *SearchErrorResponse) isSuccess() bool {
+	return false
+}
+
 
 const (
 	OrderByAsc  = -1
