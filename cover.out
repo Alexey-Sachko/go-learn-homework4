@@ -1,0 +1,25 @@
+mode: set
+github.com/Alexey-Sachko/go-learn-homework4/client.go:66.80,70.19 2 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:73.2,73.20 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:76.2,76.20 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:81.2,93.16 10 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:99.2,102.25 3 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:119.2,121.16 3 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:125.2,126.28 2 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:133.2,133.21 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:70.19,72.3 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:73.20,75.3 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:76.20,78.3 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:93.16,94.54 1 0
+github.com/Alexey-Sachko/go-learn-homework4/client.go:97.3,97.50 1 0
+github.com/Alexey-Sachko/go-learn-homework4/client.go:94.54,96.4 1 0
+github.com/Alexey-Sachko/go-learn-homework4/client.go:103.31,104.44 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:105.38,106.53 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:107.29,110.17 3 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:113.3,113.44 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:116.3,116.73 1 0
+github.com/Alexey-Sachko/go-learn-homework4/client.go:110.17,112.4 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:113.44,115.4 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:121.16,123.3 1 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:126.28,129.3 2 1
+github.com/Alexey-Sachko/go-learn-homework4/client.go:129.8,131.3 1 0

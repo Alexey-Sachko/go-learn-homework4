@@ -3,14 +3,12 @@ package main
 import (
 	"encoding/json"
 	"encoding/xml"
+	"io"
 	"io/ioutil"
-	// "io"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
-	"sort"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -30,102 +28,31 @@ type UserServer struct {
 	Gender  string   `xml:"gender"`
 }
 
-type SearchResponseUnion interface {
-	isSuccess()
-}
-
-type TestCase struct {
-	ID     string
-	Result *SearchResponseUnion
-	// IsError bool
-}
-
 func paginateUsers(users []UserServer, limit, offset int) []UserServer {
-	return users[offset : offset+limit]
+	end := offset + limit
+	if end > len(users) {
+		end = len(users)
+	}
+	return users[offset:end]
 }
 
-func getValueByField(user UserServer, field string) interface{} {
-	val := reflect.ValueOf(user)
+func contains(source, substr string) bool {
+	return strings.Contains(strings.ToLower(source), strings.ToLower(substr))
+}
 
-	var found interface{} = nil
+func queryFilterUsers(users []UserServer, query string) []UserServer {
+	if query == "" {
+		return users
+	}
 
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-
-		if typeField.Name == field {
-			found = valueField.Interface()
+	result := make([]UserServer, 0)
+	for _, user := range users {
+		if contains(user.Name, query) || contains(user.Gender, query) || contains(user.About, query) {
+			result = append(result, user)
 		}
-
-		// fmt.Printf("\tname=%v, type=%v, value=%v sortField=%v\n",
-		// 	typeField.Name,
-		// 	typeField.Type.Kind(),
-		// 	valueField,
-		// field)
 	}
 
-	return found
-}
-
-func compareStrLess(left, right interface{}) (less bool, ok bool) {
-	leftStr, ok := left.(string)
-	if !ok {
-		return false, false
-	}
-
-	rightStr, ok := right.(string)
-	if !ok {
-		return false, false
-	}
-
-	return leftStr > rightStr, true
-}
-
-func compareNumLess(left, right interface{}) (less bool, ok bool) {
-	leftStr, ok := left.(int)
-	if !ok {
-		return false, false
-	}
-
-	rightStr, ok := right.(int)
-	if !ok {
-		return false, false
-	}
-
-	return leftStr > rightStr, true
-}
-
-func compareLess(left, right interface{}) bool {
-	less, ok := compareStrLess(left, right)
-	if ok {
-		return less
-	}
-
-	less, ok = compareNumLess(left, right)
-	if ok {
-		return less
-	}
-
-	fmt.Printf("\ntypes: %T, %T\n", left, right)
-	panic("UNHANDLED TYPE")
-}
-
-func orderUsers(users *[]UserServer, field string, by int) {
-	sort.SliceStable(*users, func(i, j int) bool {
-		left := getValueByField((*users)[i], field)
-		right := getValueByField((*users)[j], field)
-
-		if left == nil || right == nil {
-			return false
-		}
-
-		result := compareLess(left, right)
-		if by == 1 {
-			return !result
-		}
-
-		return result
-	})
+	return result
 }
 
 func FindUsersDummy(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +70,8 @@ func FindUsersDummy(w http.ResponseWriter, r *http.Request) {
 	sReq.OrderField = r.FormValue("order_field")
 	sReq.OrderBy, _ = strconv.Atoi(r.FormValue("order_by"))
 
-	if sReq.OrderBy < -1 || sReq.OrderBy > 1 {
-		sReq.OrderBy = 0
+	if sReq.OrderBy != OrderByAsc && sReq.OrderBy != OrderByDesc {
+		sReq.OrderBy = OrderByAsIs
 	}
 
 	rawUsers, err := ioutil.ReadFile("dataset.xml")
@@ -161,12 +88,9 @@ func FindUsersDummy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	users := fileRoot.Users
+	orderUsers(&users, sReq.OrderField, sReq.OrderBy)
 
-	if sReq.OrderField != "" && sReq.OrderBy != 0 {
-		orderUsers(&users, sReq.OrderField, sReq.OrderBy)
-	}
-
-	resUsers := paginateUsers(users, sReq.Limit, sReq.Offset)
+	resUsers := paginateUsers(queryFilterUsers(users, sReq.Query), sReq.Limit, sReq.Offset)
 
 	resStr, err := json.Marshal(resUsers)
 	if err != nil {
@@ -175,31 +99,113 @@ func FindUsersDummy(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(resStr)
+}
 
-	// switch key {
-	// case "42":
-	// 	w.WriteHeader(http.StatusOK)
-	// 	io.WriteString(w, `{"status": 200, "balance": 100500}`)
-	// case "100500":
-	// 	w.WriteHeader(http.StatusOK)
-	// 	io.WriteString(w, `{"status": 400, "err": "bad_balance"}`)
-	// case "__broken_json":
-	// 	w.WriteHeader(http.StatusOK)
-	// 	io.WriteString(w, `{"status": 400`) //broken json
-	// case "__internal_error":
-	// 	fallthrough
-	// default:
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// }
+func FindUsersDummyErr(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+	}
+}
+
+func FindUsersDummyBadOrderField(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
+	errRes := SearchErrorResponse{Error: "ErrorBadOrderField"}
+	b, _ := json.Marshal(errRes)
+	w.Write(b)
+}
+
+func FindUsersDummyInvalidJson(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, `{"hello": "world"`)
+}
+
+const correctToken = "CORRECT_TOKEN"
+
+func TestFindUsersLessLimit(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummy))
+
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+	_, err := cl.FindUsers(SearchRequest{Limit: -1})
+	if err == nil {
+		t.Error("Limit: < 0, should return error")
+	}
+}
+
+func TestFindUsersLessOffset(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummy))
+
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+	_, err := cl.FindUsers(SearchRequest{Offset: -1})
+	if err == nil {
+		t.Error("Offset < 0, should return error")
+	}
 }
 
 func TestFindUsers(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummy))
 
-	cl := SearchClient{URL: ts.URL, AccessToken: "STUB"}
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
 
-	res, _ := cl.FindUsers(SearchRequest{Limit: 10, OrderField: "Id", OrderBy: -1})
-	for _, user := range res.Users {
-		fmt.Println("user: ", user.Id)
+	res, err := cl.FindUsers(SearchRequest{Limit: 10})
+	if err != nil {
+		t.Error("Should work without err")
+	}
+
+	if res == nil {
+		t.Error("Should return response")
+	}
+}
+
+func TestFindUsersMaxLimit(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummy))
+
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+	res, _ := cl.FindUsers(SearchRequest{Limit: 26})
+	if len(res.Users) > 25 {
+		t.Error("Should send Limit less or equal 25")
+	}
+}
+
+func TestFindUsersStatuses(t *testing.T) {
+	statuses := [...]int{
+		http.StatusInternalServerError,
+		http.StatusUnauthorized,
+		http.StatusBadRequest,
+	}
+
+	for _, status := range statuses {
+		ts := httptest.NewServer(http.HandlerFunc(FindUsersDummyErr(status)))
+
+		cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+		_, err := cl.FindUsers(SearchRequest{Limit: 26})
+		if err == nil {
+			t.Error("Should return error")
+		}
+	}
+}
+
+func TestFindUsersBadField(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummyBadOrderField))
+
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+	_, err := cl.FindUsers(SearchRequest{Limit: 26})
+	if err == nil {
+		t.Error("Should return error BadOrderField Error")
+	}
+}
+
+func TestFindUsersInvalidJson(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(FindUsersDummyInvalidJson))
+
+	cl := SearchClient{URL: ts.URL, AccessToken: correctToken}
+
+	_, err := cl.FindUsers(SearchRequest{Limit: 26})
+	if err == nil {
+		t.Error("Should return error")
 	}
 }
